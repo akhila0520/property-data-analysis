@@ -1,1 +1,47 @@
 First branch analysis notes
+
+Branch: tarrant-analysis
+Date: 5/20/25
+Author: Akhila
+
+Purpose:
+- Compare Denton and Tarrant County property data feeds for integration and normalization.
+
+Source Format:
+- Denton: Single fixed-width file with ~140 useful columns, wide format.
+- Tarrant: Pipe-delimited CSV split across 3 files (PropertyData_R, PropertyDataSupplemental_R, PropertyData_Exemptions), merged by account_num; long format for exemptions.
+
+Row Grain & Identifiers:
+- Denton: One row per property/year, identifier is prop_id.
+- Tarrant: One row per account/year, identifier is account_num; canonical id = account_num + year.
+
+Filtering:
+- Denton: No property class filter; all types kept.
+- Tarrant: Filtered to residential only (A1-A5 classes).
+
+Field Mapping:
+- Property ID: prop_id vs account_num
+- Year: prop_val_yr vs appraisal_year
+- Class: prop_type_cd vs property_class
+- Legal description: legal_desc vs legaldescription
+- Neighborhood: hood_cd vs nbhd/subdivisionname
+- Address: structured fields in Denton vs single situs_address in Tarrant
+- Owner names: Denton has 3 owner snapshots; Tarrant has 1
+- Exemptions: Denton uses wide column-per-exemption; Tarrant uses joined long format and abbreviation mapping
+- Valuations: Denton has homestead/non-homestead values; Tarrant aggregates values
+
+Output Shape:
+- Denton: Preserves most columns, outputs as Parquet/Delta partitions by load date.
+- Tarrant: Transforms to canonical schema with unified fields.
+
+Key Differences and Integration Considerations:
+- Denton has richer metadata (owners, confidentiality, agent info); Tarrant is pre-filtered and narrower.
+- Denton exposes split valuation model, granular exemption columns; Tarrant rolls up values, uses joinable exemption table.
+- Address and jurisdiction models differ.
+- Alignment requires crosswalk tables, normalization scripts, harmonization of owner and exemption structures.
+
+Next Steps:
+- Write scripts to harmonize property types, values, exemptions.
+- Map exemption abbreviations across counties.
+- Normalize owner address structure for unified analytics.
+

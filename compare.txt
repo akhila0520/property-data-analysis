@@ -1,1 +1,188 @@
 Tarrant vs Denton Data Analysis
+
+[200~  1. Source format & granularity
+
+  Column 1: Provider
+  Denton: Denton CAD (PACS export)
+  Tarrant: Tarrant Appraisal District (TAD)
+  ────────────────────────────────────────
+  Column 1: File
+  Denton: Single fixed-width appraisal_info.txt (~140 useful columns out of 435 in the
+    schema)
+  Tarrant: Pipe-delimited CSV; data is split across 3 files merged by account_num:
+    PropertyData_R, PropertyDataSupplemental_R, PropertyData_Exemptions
+  ────────────────────────────────────────
+  Column 1: Row grain
+  Denton: One row per property/year (prop_id + prop_val_yr)
+  Tarrant: One row per account/year (account_num + appraisal_year); exemptions are 1-many
+  and
+    grouped
+  ────────────────────────────────────────
+  Column 1: Identifier
+  Denton: prop_id (also geo_id, ref_id1/2, dataset_id)
+  Tarrant: account_num; canonical id later built as account_num + '-' + year
+
+  2. What gets filtered in
+
+  - Denton: no class filter at extract — the curated column list keeps all property types
+  and exemptions; only "appraisal_info.txt" gets the column narrowing.
+  - Tarrant: filtered to residential only — property_class in ('A1','A2','A3','A4','A5')
+  (scraping/2.generate_required_files.py:41, parsing/1.create_property_table.py:37).
+  Commercial/personal/mineral are dropped at the gate.
+
+  3. Field-by-field mapping (raw → raw)
+
+  Concept: Property ID
+  Denton (PACS): prop_id
+  Tarrant (TAD): account_num
+  ────────────────────────────────────────
+  Concept: Year
+  Denton (PACS): prop_val_yr
+  Tarrant (TAD): appraisal_year / scraped_year
+  ────────────────────────────────────────
+  Concept: Property class
+  Denton (PACS): prop_type_cd, imprv_state_cd, land_state_cd
+  Tarrant (TAD): property_class, record_type
+  ────────────────────────────────────────
+  Concept: Legal description
+  Denton (PACS): legal_desc, legal_desc2
+  Tarrant (TAD): legaldescription
+  ────────────────────────────────────────
+  Concept: Neighborhood
+  Denton (PACS): hood_cd, abs_subdv_cd
+  Tarrant (TAD): nbhd, subdivisionname (from supplemental)
+  ────────────────────────────────────────
+  Concept: Situs address
+  Denton (PACS): situs_num, situs_street_prefx, situs_street, situs_street_suffix,
+    situs_unit, situs_city, situs_zip
+  Tarrant (TAD): situs_address (single string), situscity (from supplemental); no zip
+  ────────────────────────────────────────
+  Concept: Owner name
+  Denton (PACS): py_owner_name, jan1_owner_name, appr_owner_name (3 owner snapshots)
+  Tarrant (TAD): owner_name (single)
+  ────────────────────────────────────────
+  Concept: Owner address
+  Denton (PACS): py_addr_line1/2/3, py_addr_city/state/country/zip/zip_cass/zip_rt (also
+    jan1_* and appr_* variants)
+  Tarrant (TAD): owner_address, owner_citystate (combined "City, ST"), owner_zip, owner_zip4
+  ────────────────────────────────────────
+  Concept: Land size
+  Denton (PACS): land_acres, legal_acreage
+  Tarrant (TAD): land_acres, land_sqft
+  ────────────────────────────────────────
+  Concept: Living area
+  Denton (PACS): not in info.txt (comes from improvement file)
+  Tarrant (TAD): living_area (already on property row)
+  ────────────────────────────────────────
+  Concept: Year built
+  Denton (PACS): not in info.txt (improvement file)
+  Tarrant (TAD): year_built
+  ────────────────────────────────────────
+  Concept: Valuations
+  Denton (PACS): land_hstd_val, land_non_hstd_val, imprv_hstd_val, imprv_non_hstd_val,
+    ag_use_val, ag_market, timber_use, timber_market, appraised_val, assessed_val,
+    market_value, ten_percent_cap, appraised_val_reflecting_productivity_loss
+  Tarrant (TAD): improvement_value, land_value, ag_value, total_value, appraised_value
+  ────────────────────────────────────────
+  Concept: Deed
+  Denton (PACS): deed_book_id, deed_book_page, deed_dt, deed_num
+  Tarrant (TAD): deed_book, deed_page, deed_date, instrument_no
+  ────────────────────────────────────────
+  Concept: Mortgage
+  Denton (PACS): mortgage_co_id, mortage_co_name, mortgage_acct_id
+  Tarrant (TAD): — (not in property feed)
+  ────────────────────────────────────────
+  Concept: Taxing entities
+  Denton (PACS): entities (single delimited column) plus full entity_agent_*, ca_agent_*,
+    arb_agent_* blocks
+  Tarrant (TAD): county, city, school, spec1..spec5 (5 special districts as separate
+  columns)
+  ────────────────────────────────────────
+  Concept: Agent info
+  Denton (PACS): dedicated columns for entity/CAD/ARB agents
+  Tarrant (TAD): not present in property feed (separate Tarrant agent flow)
+  ────────────────────────────────────────
+  Concept: Confidentiality
+  Denton (PACS): py_confidential_name/flag, jan1_confidential_name/flag,
+    appr_confidential_name/flag, *_address_suppress_flag
+  Tarrant (TAD): —
+  ────────────────────────────────────────
+  Concept: Rendition
+  Denton (PACS): rendition_filed, rendition_date, rendition_penalty,
+  rendition_fraud_penalty,
+    …_date_paid
+  Tarrant (TAD): —
+
+  4. Exemptions
+
+  - Denton: ~60 dedicated columns on the property row — hs_exempt, ov65_exempt,
+  ov65s_exempt, dp_exempt, dv1..dv4, dv1s..dv4s, ex_exempt, lve_exempt, ab_exempt,
+  en_exempt, fr_exempt, ht_exempt, pro_exempt, pc_exempt, so_exempt, ex366_exempt,
+  ch_exempt, eco_exempt, chodo_exempt, lih_exempt, git_exempt, dps_exempt, dvhs_exempt,
+  dvhss_exempt, clt_exempt, ex_xa..ex_xv_exempt, ppv_exempt, dvch_exempt, dvchs_exempt,
+  masss_exempt, frss_exempt, abmno_exempt, dstr_exempt, dstrs_exempt — plus
+  exemption_percentage. Wide format, one column per exemption.
+  - Tarrant: separate PropertyData_Exemptions file, 1-many, joined on account_num. Long
+  format. Raw values are abbreviations that get mapped via
+  tarrant_exemptions_abbrevation.csv → codes, then grouped per account into a single
+  comma-joined exemptions string (scraping/2.generate_required_files.py:98-119,
+  parsing/1.create_property_table.py:109-133).
+
+  5. Canonical output shape (what each pipeline writes)
+
+  - Denton lands the data essentially as-is — column list trimmed to ~140 but column names
+  are preserved from the CAD feed. Output: denton.info (Parquet) + /mnt/denton/bronze/info
+  (Delta), partitioned by load date.
+  - Tarrant transforms into a downstream schema (property table). The final dataframe at
+  parsing/1.create_property_table.py:300 has these columns:
+  property_id, legal_description, type, zoning, address,
+  neighborhood, neighborhood_cd, name, owner_id, mailing_address,
+  perc_ownership, exemptions, year, id,
+  owner_street, owner_city, owner_state, owner_zip, owner_fourdigit_zip,
+  prop_street, prop_city, prop_state, prop_zip, prop_fourdigit_zip,
+  living_area, lot_size_sqft, lot_size_acreage,
+  owner_address_json, prop_address_json,
+  names, lastName, owners_json, last_names, int_prop_id
+  - Hard-coded fields: type='Real', zoning='Residential', prop_state='TX',
+  perc_ownership='99%'. Owner names are parsed into owners_json with first/last splitting;
+  addresses are emitted both as flat strings and as JSON objects.
+
+  6. Practical differences to know
+
+  - Different universe: Denton retains all property types and rich
+  owner-snapshot/agent/confidentiality/rendition metadata. Tarrant pre-filters to
+  residential A1 to A5 and discards anything outside that.
+  - Different value model: Denton exposes the homestead/non-homestead split (land_hstd_val
+  vs land_non_hstd_val, same for improvements) plus ag/timber and the 10% cap. Tarrant only
+  has a single rolled-up improvement_value / land_value / total_value / appraised_value.
+  - Different exemption model: Denton's wide one-column-per-exemption layout vs. Tarrant's
+  long-form join + abbreviation mapping. Aligning them needs an exemption-code crosswalk
+  before either can feed a shared homestead/bill table.
+  - Different owner model: Denton ships three owner snapshots (py_* = primary/current,
+  jan1_* = owner as of Jan 1, appr_* = appraised owner) plus confidentiality flags. Tarrant
+  has one owner with the city+state mashed together in owner_citystate.
+  - Different address quality: Denton already has structured situs (number, prefix, street,
+  suffix, unit, city, zip). Tarrant has a single situs_address blob and no situs zip; the
+  pipeline back-fills prop_zip from owner_zip when streets match
+  (parsing/1.create_property_table.py:234).
+  - Different deed identifier: Denton uses deed_book_id/page + deed_num; Tarrant uses
+  deed_book/page + instrument_no. Same idea, different field names.
+  - Entities vs. taxing jurisdictions: Denton lumps them into one entities string + a
+  separate appraisal_entity_info.txt file. Tarrant lays them out as named columns (county,
+  city, school, spec1..spec5), so jurisdiction breakdown is easier in Tarrant but loses
+  ordering/IDs that Denton keeps.
+  - Improvements/land detail location: Denton has them in separate files
+  (appraisal_improvement_detail.txt, appraisal_improvement_info.txt, land_detail.json) —
+  info.txt itself does not carry living_area or year_built. Tarrant carries living_area,
+  land_sqft, land_acres, year_built on the property row, with extra residential
+  attribute/feature files joined later.
+
+  Net: Denton's property feed is wider and more granular (more owner snapshots, structured
+  situs, per-exemption flags, h-stead splits, agent/confidentiality/rendition); Tarrant's is
+   narrower and pre-aggregated but already pre-filtered to residential and already includes
+  living area / year built on the property row. Any unified model needs to reconcile (a)
+  value composition, (b) exemption representation, (c) owner snapshot semantics, and (d)
+  entity/jurisdiction shape
+
+
+
